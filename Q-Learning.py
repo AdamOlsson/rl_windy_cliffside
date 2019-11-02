@@ -17,8 +17,11 @@ def get_q_state(Q, state, env):
 def create_q_reader(Q):
     return lambda s, a : Q[s, ACT_TO_IND[a]]
 
+def get_max_q(Q, state, env):
+    q_state = get_q_state(Q, state, env)
+    return max([q_state(a) for a in range(env.action_space)])
 
-def sarsa(env, policy, epsilon=0.1, alpha=0.5, gamma=1, iterations=1000):
+def Q_Learning(env, policy, epsilon=0.1, alpha=0.5, gamma=1, iterations=1000):
 
     Q = defaultdict(float)
     Q_reader = create_q_reader(Q)
@@ -27,19 +30,18 @@ def sarsa(env, policy, epsilon=0.1, alpha=0.5, gamma=1, iterations=1000):
 
     for episode in range(iterations):
         if episode % 10 == 0:
-            print("Playing episode {} out of {}. Average number of steps: {}.".format(episode, iterations, no_steps/10))
+            print("Playing episode {} out of {}.".format(episode, iterations))
 
         state = env.reset()
-        action = policy(epsilon, env.get_actions(state), get_q_state(Q, state, env))
 
         game_over = False
         while not game_over:
+            action = policy(epsilon, env.get_actions(), get_q_state(Q, state, env))
             next_state, reward, game_over, info = env.step(action)
-            next_action = policy(epsilon, env.get_actions(next_state), get_q_state(Q, next_state, env))
 
-            Q[state, ACT_TO_IND[action]] += alpha*(reward + gamma*Q_reader(next_state, next_action) - Q_reader(state, action))
+            Q[state, ACT_TO_IND[action]] += alpha*(reward + gamma*get_max_q(Q, next_state, env) - Q_reader(state, action))
 
-            state = next_state; action = next_action
+            state = next_state
             no_steps += 1
         
         history.append((no_steps, episode))
@@ -92,13 +94,13 @@ def play_no_explore(env, policy, Q):
     history = []
 
     state = env.reset()
-    action = policy(0, env.get_actions(state), get_q_state(Q, state, env))
+    action = policy(0, env.get_actions(), get_q_state(Q, state, env))
     history.append((state, action))
 
     game_over = False
     while not game_over:
         next_state, _, game_over, _ = env.step(action)
-        next_action = policy(0, env.get_actions(next_state), get_q_state(Q, next_state, env))
+        next_action = policy(0, env.get_actions(), get_q_state(Q, next_state, env))
     
         state = next_state; action = next_action
         history.append((state, action))
@@ -126,27 +128,29 @@ def plot_history(env, h):
 
         grid[y,x] = 200
 
+    for y,x in env.reset_state:
+        grid[y,x] = 120
 
     fig, ax = plt.subplots(1, figsize=(20,15))
     plt.imshow(grid, cmap='gray', vmin=0, vmax=255)
 
     ax.grid(linestyle='-', linewidth=1)
 
-    ax.set_xticks(np.arange(-.5, 10, 1))
-    ax.set_yticks(np.arange(-.5, 10, 1))
+    ax.set_xticks(np.arange(-.5, 12, 1))
+    ax.set_yticks(np.arange(-.5, 4, 1))
     ax.set_xticklabels([])
     ax.set_yticklabels([])
-    ax.set_xlabel('Wind (number of steps pushed North)', fontsize=30)
+    #ax.set_xlabel('Wind (number of steps pushed North)', fontsize=30)
 
     ax.text(env.initial_state[1], env.initial_state[0], 'Start', ha="center", va="center", fontsize=30)
     ax.text(env.terminate_state[1], env.terminate_state[0], 'End', ha="center", va="center", fontsize=30)
 
-    ax.xaxis.set_major_formatter(ticker.NullFormatter())
-    ax.xaxis.set_minor_locator(ticker.FixedLocator(np.arange(0, 10, 1)))
-    ax.xaxis.set_minor_formatter(ticker.FixedFormatter(np.abs(env.north_wind)))
-    ax.tick_params(which='minor', labelsize=20)
+    #ax.xaxis.set_major_formatter(ticker.NullFormatter())
+    #ax.xaxis.set_minor_locator(ticker.FixedLocator(np.arange(0, 10, 1)))
+    #ax.xaxis.set_minor_formatter(ticker.FixedFormatter(np.abs(env.north_wind)))
+    #ax.tick_params(which='minor', labelsize=20)
 
-    plt.arrow(5.5, 6, 0, -4, width=2, head_width=5, head_length=2, alpha=0.4)
+    #plt.arrow(5.5, 6, 0, -4, width=2, head_width=5, head_length=2, alpha=0.4)
     plt.quiver(xs, ys, us, vs)
 
     plt.title('Policy', fontsize=35)
@@ -165,15 +169,14 @@ def plot_train_history(h):
     plt.plot(data, np.arange(len(data)))
     
 
-    
 
 if __name__ == "__main__":
-    env = WindyGridworld()
+    env = WindyCliffside()
     train_history = []
 
     if True: # Save time but using pre-trained Q values
-        Q, train_history = sarsa(env, behavior_policy, iterations=10000)
-
+        Q, train_history = Q_Learning(env, behavior_policy, iterations=10000)
+        
         with open('Q.p', 'wb') as f:
             pickle.dump(Q, f, protocol=pickle.HIGHEST_PROTOCOL)
 
